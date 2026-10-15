@@ -102,6 +102,7 @@ class PlayerFragment : Fragment(), BackPressInterceptor {
         // Observe ViewModel
         viewModel.player.observe(this) { player ->
             playerView.player = player
+            updatePictureInPictureParams()
             // Automatically close fragment, unless we're in PiP mode
             if (player == null && !(AndroidVersion.isAtLeastN && requireActivity().isInPictureInPictureMode)) {
                 parentFragmentManager.popBackStack()
@@ -111,6 +112,7 @@ class PlayerFragment : Fragment(), BackPressInterceptor {
             val isPlaying = viewModel.playerOrNull?.isPlaying == true
             requireActivity().window.keepScreenOn = isPlaying
             loadingIndicator.isVisible = playerState == Player.STATE_BUFFERING
+            updatePictureInPictureParams()
         }
         viewModel.decoderType.observe(this) { type ->
             playerMenus?.updatedSelectedDecoder(type)
@@ -130,6 +132,7 @@ class PlayerFragment : Fragment(), BackPressInterceptor {
 
             // Update title and player menus
             toolbar.title = mediaSource.getName(requireContext())
+            updatePictureInPictureParams()
             playerMenus?.onQueueItemChanged(mediaSource, viewModel.queueManager.hasNext())
         }
 
@@ -201,6 +204,13 @@ class PlayerFragment : Fragment(), BackPressInterceptor {
 
             insets
         }
+
+        // Register eligibility before a home gesture starts; onUserLeaveHint can arrive too late.
+        playerView.findViewById<View>(Media3R.id.exo_content_frame).addOnLayoutChangeListener {
+                _, _, _, _, _, _, _, _, _ ->
+            updatePictureInPictureParams()
+        }
+        updatePictureInPictureParams()
 
         // Handle toolbar back button
         toolbar.setNavigationOnClickListener { parentFragmentManager.popBackStack() }
@@ -376,32 +386,42 @@ class PlayerFragment : Fragment(), BackPressInterceptor {
     }
 
     fun onUserLeaveHint() {
-        if (AndroidVersion.isAtLeastN && viewModel.playerOrNull != null) {
+        // Android 12+ enters PiP automatically using the parameters published during playback.
+        if (!AndroidVersion.isAtLeastS && AndroidVersion.isAtLeastN && viewModel.playerOrNull != null) {
             requireActivity().enterPictureInPicture()
         }
     }
 
-    @Suppress("NestedBlockDepth")
+    private fun updatePictureInPictureParams() {
+        if (!AndroidVersion.isAtLeastS || _playerBinding == null) return
+        requireActivity().setPictureInPictureParams(buildPictureInPictureParams())
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun buildPictureInPictureParams(): PictureInPictureParams = PictureInPictureParams.Builder().apply {
+        val aspectRational = currentVideoStream?.aspectRational?.let { aspectRational ->
+            when {
+                aspectRational < PIP_MIN_RATIONAL -> PIP_MIN_RATIONAL
+                aspectRational > PIP_MAX_RATIONAL -> PIP_MAX_RATIONAL
+                else -> aspectRational
+            }
+        }
+        setAspectRatio(aspectRational)
+        val contentFrame: View = playerView.findViewById(Media3R.id.exo_content_frame)
+        val contentRect = with(contentFrame) {
+            val (x, y) = intArrayOf(0, 0).also(::getLocationInWindow)
+            Rect(x, y, x + width, y + height)
+        }
+        if (!contentRect.isEmpty) setSourceRectHint(contentRect)
+        if (AndroidVersion.isAtLeastS) {
+            setAutoEnterEnabled(viewModel.playerOrNull != null)
+        }
+    }.build()
+
     @RequiresApi(Build.VERSION_CODES.N)
     private fun Activity.enterPictureInPicture() {
         if (AndroidVersion.isAtLeastO) {
-            val params = PictureInPictureParams.Builder().apply {
-                val aspectRational = currentVideoStream?.aspectRational?.let { aspectRational ->
-                    when {
-                        aspectRational < PIP_MIN_RATIONAL -> PIP_MIN_RATIONAL
-                        aspectRational > PIP_MAX_RATIONAL -> PIP_MAX_RATIONAL
-                        else -> aspectRational
-                    }
-                }
-                setAspectRatio(aspectRational)
-                val contentFrame: View = playerView.findViewById(Media3R.id.exo_content_frame)
-                val contentRect = with(contentFrame) {
-                    val (x, y) = intArrayOf(0, 0).also(::getLocationInWindow)
-                    Rect(x, y, x + width, y + height)
-                }
-                setSourceRectHint(contentRect)
-            }.build()
-            enterPictureInPictureMode(params)
+            enterPictureInPictureMode(buildPictureInPictureParams())
         } else {
             @Suppress("DEPRECATION")
             enterPictureInPictureMode()
@@ -432,6 +452,11 @@ class PlayerFragment : Fragment(), BackPressInterceptor {
     }
 
     override fun onDestroyView() {
+        if (AndroidVersion.isAtLeastS) {
+            requireActivity().setPictureInPictureParams(
+                PictureInPictureParams.Builder().setAutoEnterEnabled(false).build(),
+            )
+        }
         super.onDestroyView()
         // Detach player from PlayerView
         playerView.player = null

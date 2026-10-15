@@ -1,0 +1,41 @@
+{
+  "Id": "00000000-0000-0000-0000-000000000001",
+  "Name": "Picture-in-picture test video",
+  "Type": "Movie",
+  "MediaSources": [{
+    "Id": "pip-test",
+    "Name": "Picture-in-picture test video",
+    "RunTimeTicks": 600000000,
+    "Protocol": "File",
+    "Type": "Default",
+    "IsRemote": false,
+    "TranscodingSubProtocol": "http",
+    "ReadAtNativeFramerate": false,
+    "IgnoreDts": false,
+    "IgnoreIndex": false,
+    "GenPtsInput": false,
+    "SupportsTranscoding": false,
+    "SupportsDirectStream": true,
+    "SupportsDirectPlay": true,
+    "IsInfiniteStream": false,
+    "RequiresOpening": false,
+    "RequiresClosing": false,
+    "RequiresLooping": false,
+    "SupportsProbing": false,
+    "HasSegments": false,
+    "MediaStreams": [{
+      "Type": "Video",
+      "Index": 0,
+      "Codec": "h264",
+      "Width": 320,
+      "Height": 180,
+      "IsInterlaced": false,
+      "IsDefault": true,
+      "IsForced": false,
+      "IsHearingImpaired": false,
+      "IsExternal": false,
+      "IsTextSubtitleStream": false,
+      "SupportsExternalStream": false
+    }]
+  }]
+}
